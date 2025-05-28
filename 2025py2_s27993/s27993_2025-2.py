@@ -89,7 +89,7 @@ def main():
     min_length = int(input())
     print("Maximum sequence length:")
     max_length = int(input())
-    print("Maximum records to fetch:")
+    print("How many you want me to fetch:")
     max_records = int(input())
 
     total, webenv, query_key = search_genbank_by_taxid(taxid)
