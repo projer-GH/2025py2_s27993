@@ -35,7 +35,7 @@ def fetch_filtered_records(total, webenv, query_key, max_fetch, min_len, max_len
 
     while start < max_fetch:
         try:
-            print(f"Fetching records {start + 1} to {min(start + batch_size, max_fetch)}...")
+            print(f"Fetching records {start + 1} to {min(start + batch_size, max_fetch)}")
             handle = Entrez.efetch(
                 db="nucleotide",
                 rettype="gb",
@@ -97,7 +97,6 @@ def main():
         print("No results found or an error occurred.")
         return
 
-    print(f"Total records found: {total}")
     records = fetch_filtered_records(total, webenv, query_key, max_records, min_length, max_length)
     print(f"Filtered records count: {len(records)}")
 
