@@ -98,8 +98,6 @@ def main():
         return
 
     records = fetch_filtered_records(total, webenv, query_key, max_records, min_length, max_length)
-    print(f"Filtered records count: {len(records)}")
-
     csv_file = f"{taxid}_{min_length}_{max_length}.csv"
     img_file = f"{taxid}_{min_length}_{max_length}.png"
 
