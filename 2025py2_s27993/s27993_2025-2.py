@@ -38,9 +38,6 @@ class GenBankRetriever:
             return 0
 
     def fetch_records(self, max_records, min_len, max_len):
-        """
-        Pobiera dane z bazy GenBank dla zadanych limitów i filtruje je według długości sekwencji.
-        """
         start = 0
         batch_size = 500
         data = []
