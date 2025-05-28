@@ -1,121 +1,111 @@
 from Bio import Entrez, SeqIO
-from http.client import IncompleteRead
 import pandas as pd
 import matplotlib.pyplot as plt
 import time
 import random
+from http.client import IncompleteRead
 
-printer = print
+def initialize_entrez(email, api_key):
+    Entrez.email = email
+    Entrez.api_key = api_key
+    Entrez.tool = "GenBankExtendedTool"
 
-class GenBankRetriever:
-    def __init__(self, email, api_key):
-        Entrez.email = email
-        Entrez.api_key = api_key
-        self.email = email
-        self.api_key = api_key
-        self.webenv = None
-        self.query_key = None
+def search_genbank_by_taxid(taxid):
+    try:
+        taxonomy_response = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml")
+        taxonomy_data = Entrez.read(taxonomy_response)
+        organism = taxonomy_data[0]["ScientificName"]
+        print(f"Organism: {organism}")
+        
+        query = f"txid{taxid}[Organism]"
+        search_response = Entrez.esearch(db="nucleotide", term=query, usehistory="y")
+        search_data = Entrez.read(search_response)
+        total_records = int(search_data["Count"])
+        
+        return total_records, search_data["WebEnv"], search_data["QueryKey"]
+    
+    except Exception as error:
+        print(f"An error occurred during search: {error}")
+        return 0, None, None
 
-    def search_by_taxid(self, taxid):
-   
+def fetch_filtered_records(total, webenv, query_key, max_fetch, min_len, max_len):
+    filtered = []
+    start = 0
+    batch_size = 500
+
+    while start < max_fetch:
         try:
-            tax_handle = Entrez.efetch(db="taxonomy", id=taxid, retmode="xml")
-            tax_record = Entrez.read(tax_handle)
-            organism = tax_record[0]['ScientificName']
-            printer(f"Organism found: {organism}")
+            print(f"Fetching records {start + 1} to {min(start + batch_size, max_fetch)}...")
+            handle = Entrez.efetch(
+                db="nucleotide",
+                rettype="gb",
+                retmode="text",
+                retstart=start,
+                retmax=min(batch_size, max_fetch - start),
+                webenv=webenv,
+                query_key=query_key
+            )
+            for record in SeqIO.parse(handle, "gb"):
+                length = len(record.seq)
+                if min_len <= length <= max_len:
+                    filtered.append((record.id, length, record.description))
+            start += batch_size
+            time.sleep(0.4 + random.uniform(0, 0.3))
+        except IncompleteRead:
+            print("Incomplete read occurred. Retrying after a short wait...")
+            time.sleep(3)
+            continue
+    return filtered
 
-            query = f"txid{taxid}[Organism]"
-            handle = Entrez.esearch(db="nucleotide", term=query, usehistory="y")
-            search_result = Entrez.read(handle)
-
-            self.webenv = search_result["WebEnv"]
-            self.query_key = search_result["QueryKey"]
-            total_count = int(search_result["Count"])
-            return total_count
-
-        except Exception as e:
-            printer(f"Error during taxid search: {e}")
-            return 0
-
-    def fetch_records(self, max_records, min_len, max_len):
-        start = 0
-        batch_size = 500
-        data = []
-
-        while start < max_records:
-            try:
-                handle = Entrez.efetch(
-                    db="nucleotide",
-                    rettype="gb",
-                    retmode="text",
-                    retstart=start,
-                    retmax=min(batch_size, max_records - start),
-                    webenv=self.webenv,
-                    query_key=self.query_key
-                )
-
-                for record in SeqIO.parse(handle, "gb"):
-                    length = len(record.seq)
-                    if min_len <= length <= max_len:
-                        data.append((record.id, length, record.description))
-
-                start += batch_size
-                printer(f"Downloaded: {min(start, max_records)}/{max_records}")
-
-                time.sleep(0.5 + random.random() * 0.3)
-
-            except IncompleteRead:
-                printer("IncompleteRead encountered, retrying after pause...")
-                time.sleep(5)
-                continue
-
-        return data
-
-
-def save_to_csv(data, filename):
+def export_to_csv(data, filename):
     df = pd.DataFrame(data, columns=["Accession", "Length", "Description"])
     df.to_csv(filename, index=False)
-    printer(f"Saved CSV to: {filename}")
+    print(f"CSV saved: {filename}")
+    return df
 
-
-def create_plot(csv_file, output_image):
-    df = pd.read_csv(csv_file).sort_values("Length", ascending=False).head(100)
+def generate_plot(df, image_filename):
+    df_sorted = df.sort_values("Length", ascending=False).head(100)
     plt.figure(figsize=(12, 6))
-    plt.plot(df["Accession"], df["Length"], marker='o')
+    plt.plot(df_sorted["Accession"], df_sorted["Length"], marker='o', linestyle='-')
     plt.xticks(rotation=90, fontsize=6)
-    plt.xlabel("Accession")
+    plt.title("Top 100 GenBank Sequences by Length")
+    plt.xlabel("Accession Number")
     plt.ylabel("Sequence Length")
-    plt.title("Top 100 Longest Sequences")
     plt.tight_layout()
-    plt.savefig(output_image)
-    printer(f"Plot saved to: {output_image}")
-
+    plt.savefig(image_filename)
+    print(f"Plot saved: {image_filename}")
 
 def main():
-    printer("Enter your email:")
-    email = input()
-    printer("Enter your API key:")
-    api_key = input()
-    printer("Enter TaxID:")
-    taxid = input()
-    printer("Minimum sequence length:")
+    print("Enter your NCBI email:")
+    email = input().strip()
+    print("Enter your NCBI API key:")
+    api_key = input().strip()
+    initialize_entrez(email, api_key)
+
+    print("Enter organism's taxonomic ID:")
+    taxid = input().strip()
+
+    print("Minimum sequence length:")
     min_length = int(input())
-    printer("Maximum sequence length:")
+    print("Maximum sequence length:")
     max_length = int(input())
-    printer("Maximum number of records to fetch:")
+    print("Maximum records to fetch:")
     max_records = int(input())
 
-    retriever = GenBankRetriever(email, api_key)
-    total = retriever.search_by_taxid(taxid)
-    printer(f"Total records found: {total}")
+    total, webenv, query_key = search_genbank_by_taxid(taxid)
+    if total == 0 or not webenv or not query_key:
+        print("No results found or an error occurred.")
+        return
 
-    data = retriever.fetch_records(max_records, min_length, max_length)
-    printer(f"Filtered matches found: {len(data)}")
+    print(f"Total records found: {total}")
+    records = fetch_filtered_records(total, webenv, query_key, max_records, min_length, max_length)
+    print(f"Filtered records count: {len(records)}")
 
-    csv_filename = f"{taxid}_{min_length}_{max_length}.csv"
-    png_filename = f"{taxid}_{min_length}_{max_length}.png"
-    save_to_csv(data, csv_filename)
-    create_plot(csv_filename, png_filename)
+    csv_file = f"{taxid}_{min_length}_{max_length}.csv"
+    img_file = f"{taxid}_{min_length}_{max_length}.png"
+
+    df = export_to_csv(records, csv_file)
+    generate_plot(df, img_file)
 
 if __name__ == "__main__":
     main()
